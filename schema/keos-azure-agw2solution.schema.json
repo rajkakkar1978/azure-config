@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KEOS Azure Application Gateway v2 solution",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "applicationGatewayRouting": {
+      "type": "object",
+      "properties": {
+        "virtual": {
+          "type": "object",
+          "properties": {
+            "backendAddressPools": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "customDomain": {
+              "type": "string"
+            },
+            "probe": {
+              "type": "object",
+              "properties": {
+                "interval": {
+                  "type": "integer"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "pickHostNameFromBackendHttpSettings": {
+                  "type": "boolean"
+                },
+                "port": {
+                  "type": "integer"
+                },
+                "protocol": {
+                  "type": "string"
+                },
+                "timeout": {
+                  "type": "integer"
+                },
+                "unhealthyThreshold": {
+                  "type": "integer"
+                },
+                "statusCodes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "interval",
+                "path",
+                "pickHostNameFromBackendHttpSettings",
+                "port",
+                "protocol",
+                "timeout",
+                "unhealthyThreshold",
+                "statusCodes"
+              ]
+            },
+            "backendHttpSettingsCollection": {
+              "type": "object",
+              "properties": {
+                "port": {
+                  "type": "integer"
+                },
+                "protocol": {
+                  "type": "string"
+                },
+                "cookieBasedAffinity": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
