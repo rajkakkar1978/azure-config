@@ -1,0 +1,74 @@
+parameters:
+  - name: tenant
+    type: string
+  - name: subscriptionID
+    type: string
+  - name: solutionFeed
+    type: string
+  - name: moduleName
+    type: string
+  - name: moduleFeed
+    type: string
+  - name: servicePrincipal
+    type: string
+  - name: businessUnit
+    type: string
+  - name: projectName
+    type: string
+  - name: environment
+    type: string
+
+steps:
+  - task: PowerShell@2
+    displayName: Get Package Version
+    inputs:
+      pwsh: true
+      targetType: inline
+      script: |
+        $solutionPath = "$(System.DefaultWorkingDirectory)/projects/${{ parameters.tenant }}/${{ parameters.businessUnit }}/${{ parameters.projectName }}/${{ parameters.environment }}/solution.json"
+        $solution = Get-Content -LiteralPath $solutionPath -Raw | ConvertFrom-Json -ErrorAction Stop
+        if ([string]::IsNullOrWhiteSpace([string]$solution.packageVersion)) {
+            throw "packageVersion is missing from $solutionPath"
+        }
+        Write-Host "Desired Package Version: $($solution.packageVersion)"
+        Write-Host "##vso[task.setvariable variable=packageVersion]$($solution.packageVersion)"
+
+  - task: DownloadPackage@1
+    displayName: Get AgwV2 Package
+    inputs:
+      packageType: nuget
+      feed: ${{ parameters.solutionFeed }}
+      definition: Solutions.Azure.AgwV2
+      version: $(packageVersion)
+      downloadPath: $(System.ArtifactsDirectory)
+      extract: false
+
+  - task: PowerShell@2
+    displayName: Extract AgwV2Solution Package
+    inputs:
+      pwsh: true
+      targetType: inline
+      script: |
+        $packagePath = Join-Path $env:SYSTEM_ARTIFACTSDIRECTORY 'Solutions.Azure.AgwV2.nupkg'
+        if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) {
+            throw "Downloaded solution package was not found: $packagePath"
+        }
+
+        $expandedLocation = Join-Path $env:SYSTEM_ARTIFACTSDIRECTORY 'Solutions.Azure.AgwV2'
+        Expand-Archive -LiteralPath $packagePath -DestinationPath $expandedLocation -Force
+        Write-Host "##vso[task.setvariable variable=expandedLocation]$expandedLocation"
+
+  # The referenced module-install template was not included in the archive.
+
+  - task: AzurePowerShell@5
+    displayName: Deploy AgwV2 Solution
+    inputs:
+      azureSubscription: ${{ parameters.servicePrincipal }}
+      scriptType: FilePath
+      scriptPath: $(expandedLocation)/scripts/Deploy.ps1
+      scriptArguments: >-
+        -subscriptionID "${{ parameters.subscriptionID }}"
+        -projectConfigPath "$(System.DefaultWorkingDirectory)/projects/${{ parameters.tenant }}/${{ parameters.businessUnit }}/${{ parameters.projectName }}/${{ parameters.environment }}"
+        -nonInteractive
+      azurePowerShellVersion: LatestVersion
+      pwsh: true

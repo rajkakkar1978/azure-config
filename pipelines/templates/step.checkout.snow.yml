@@ -1,0 +1,31 @@
+parameters:
+  - name: tenant
+    type: string
+    default: kpmgsandboxcomau
+    values:
+      - kpmgcomau
+      - kpmgsandboxcomau
+  - name: branchToCheckout
+    displayName: Branch to Checkout
+    type: string
+
+steps:
+  - checkout: git://KPMGAU-BUS-KEOS_Azure/keos-environments@${{ parameters.branchToCheckout }}
+    fetchDepth: 1
+    clean: true
+    persistCredentials: true
+
+  - task: PowerShell@2
+    displayName: Retrieve Details
+    name: EnvironmentVar
+    inputs:
+      pwsh: true
+      targetType: inline
+      script: |
+        $subscriptionPath = "$(System.DefaultWorkingDirectory)/projects/${{ parameters.tenant }}/${{ parameters.branchToCheckout }}/subscription.json"
+        $subscriptionDetails = Get-Content -LiteralPath $subscriptionPath -Raw | ConvertFrom-Json -ErrorAction Stop
+
+        Write-Host -Object "TenantName: '${{ parameters.tenant }}' Tenant ID: '$($subscriptionDetails.tenantID)'"
+        Write-Host -Object "SubscriptionName: '$($subscriptionDetails.subscriptionName)' Subscription ID: '$($subscriptionDetails.subscriptionID)'"
+        Write-Host -Object "##vso[task.setvariable variable=tenantID;isOutput=true]$($subscriptionDetails.tenantID)"
+        Write-Host -Object "##vso[task.setvariable variable=subscriptionID;isOutput=true]$($subscriptionDetails.subscriptionID)"

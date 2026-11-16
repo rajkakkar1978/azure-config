@@ -1,0 +1,86 @@
+parameters:
+  - name: tenant
+    type: string
+    default: kpmgsandboxcomau
+    values:
+      - kpmgcomau
+      - kpmgsandboxcomau
+  - name: sourceGitBranchName
+    displayName: Source Git Branch Name
+    type: string
+  - name: targetGitBranchName
+    displayName: Push all changes to a separate Git branch to ensure the source branch does not become corrupted
+    type: string
+  - name: gitUserName
+    displayName: UserName for Git commits
+    type: string
+    default: KPMG DevOps User
+  - name: gitUserEmail
+    displayName: Email Address for Git commits
+    type: string
+    default: devops@kpmg.com
+
+steps:
+  - task: PowerShell@2
+    displayName: Push Commit to Branch (Source -> Target)
+    env:
+      CONFIG_TENANT: ${{ parameters.tenant }}
+      SOURCE_GIT_BRANCH: ${{ parameters.sourceGitBranchName }}
+      TARGET_GIT_BRANCH: ${{ parameters.targetGitBranchName }}
+      GIT_USER_NAME: ${{ parameters.gitUserName }}
+      GIT_USER_EMAIL: ${{ parameters.gitUserEmail }}
+    inputs:
+      pwsh: true
+      targetType: inline
+      script: |
+        $ErrorActionPreference = 'Stop'
+
+        if ($env:CONFIG_TENANT -notin @('kpmgcomau', 'kpmgsandboxcomau')) {
+            throw "Unsupported tenant: $env:CONFIG_TENANT"
+        }
+
+        if ([string]::IsNullOrWhiteSpace($env:SOURCE_GIT_BRANCH) -or [string]::IsNullOrWhiteSpace($env:TARGET_GIT_BRANCH)) {
+            throw 'Both source and target branch names are required.'
+        }
+
+        & git check-ref-format --branch $env:TARGET_GIT_BRANCH
+        if ($LASTEXITCODE -ne 0) {
+            throw "Invalid target Git branch name: $env:TARGET_GIT_BRANCH"
+        }
+
+        & git config user.email $env:GIT_USER_EMAIL
+        if ($LASTEXITCODE -ne 0) { throw 'Unable to configure the Git commit email.' }
+        & git config user.name $env:GIT_USER_NAME
+        if ($LASTEXITCODE -ne 0) { throw 'Unable to configure the Git commit user.' }
+
+        Write-Host -Object "Source Branch: $env:SOURCE_GIT_BRANCH Target branch: $env:TARGET_GIT_BRANCH" -ForegroundColor Cyan
+
+        $tenantRoot = Join-Path (Join-Path $env:SYSTEM_DEFAULTWORKINGDIRECTORY 'root') $env:CONFIG_TENANT
+        $filesToAdd = @(
+            (Join-Path $tenantRoot 'keos-environments.json')
+            (Join-Path $tenantRoot 'sso permission/assignment.json')
+            (Join-Path $tenantRoot 'sso permission/group.json')
+        )
+
+        $missingFiles = @($filesToAdd | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
+        if ($missingFiles.Count -gt 0) {
+            throw "Expected configuration file(s) are missing: $($missingFiles -join ', ')"
+        }
+
+        & git add -- @filesToAdd
+        if ($LASTEXITCODE -ne 0) { throw 'Unable to stage the expected configuration files.' }
+        & git commit -m 'Automated DevOps SSO Commit - SNOW Integration'
+        if ($LASTEXITCODE -ne 0) { throw 'Git commit failed; no changes may have been available to commit.' }
+
+        $targetRef = "refs/heads/$env:TARGET_GIT_BRANCH"
+        $remoteRef = & git ls-remote --heads origin $targetRef
+        if ($LASTEXITCODE -ne 0) { throw 'Unable to read the current target branch from origin.' }
+
+        $expectedOid = ''
+        if ($remoteRef) {
+            $expectedOid = ($remoteRef -split '\s+')[0]
+        }
+
+        $lease = "${targetRef}:$expectedOid"
+        & git push "--force-with-lease=$lease" origin "HEAD:$targetRef"
+        if ($LASTEXITCODE -ne 0) { throw "Unable to update target branch $env:TARGET_GIT_BRANCH." }
