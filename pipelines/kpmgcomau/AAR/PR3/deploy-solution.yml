@@ -1,1 +1,76 @@
 trigger: none
+
+variables:
+  - name: tenant
+    value: kpmgcomau
+
+  - name: businessUnit
+    value: AAR
+
+  - name: projectName
+    value: PR3
+
+  - name: solutionfeed
+    value: KPMG-AU-BUS-KEOS_Azure/Keos-solutions-test
+
+  - name: moduleFeed
+    value: keos-modules
+
+  - name: moduleName
+    value: Keos-Azure, Keos-Helper
+
+  - group: tenant-kpmgcomau
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: dev
+    displayName: Deploy DEV
+    dependsOn: []
+    variables:
+      environment: dev
+      servicePrincipal: ADD.ServicePrincipal.AU.DEV
+      subscription: KPMG-AU-AAR-DEV
+    jobs:
+      - deployment: Deploy_DEV_Environment
+        environment: DEV
+        dependsOn: []
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: /pipelines/templates/step.checkout_multistage.yml
+                  parameters:
+                    tenant: ${{ variables.tenant }}
+                    businessUnit: ${{ variables.businessUnit }}
+                    projectName: ${{ variables.projectName }}
+                    environment: $(Environment)
+
+                - task: PowerShell@2
+                  displayName: Validate Subscription Details
+                  inputs:
+                    pwsh: true
+                    targetType: inline
+                    script: |
+                      Write-Host -Object "$(envName) - Subscription Details"
+                      Write-Host -Object "------------------------------------------------------------"
+                      Write-Host -Object "Subscription Name: $($EnvironmentVar.subscriptionName)"
+                      Write-Host -Object "Subscription Id: $($EnvironmentVar.subscriptionId)"
+
+                # - template: /pipelines/templates/step.deploy-networksolution.yml
+                #   parameters:
+                #     tenant: ${{ variables.tenant }}
+                #     subscription: ${{ variables.subscription }}
+                #     subscriptionId: $($EnvironmentVar.subscriptionId)
+                #     solutionfeed: ${{ variables.solutionfeed }}
+                #     moduleName: ${{ variables.moduleName }}
+                #     moduleFeed: ${{ variables.moduleFeed }}
+                #     servicePrincipal: ${{ variables.servicePrincipal }}
+                #     businessUnit: ${{ variables.businessUnit }}
+                #     projectName: ${{ variables.projectName }}
+                #     environment: $(envName)
+
+                # - template: /pipelines/templates/step.deploy-azure-keyvault.solution.yml
+                #   parameters:
+                #     tenant: ${{ variables.tenant }}
